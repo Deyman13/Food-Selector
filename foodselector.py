@@ -21,25 +21,28 @@ def get_first_value(string):
 
 def correct_input_recipe_and_ingredient(recipe, ingredient):
 
-    if isinstance(recipe, str):
-        if any(i.isdigit() for i in recipe):
+    try:
+        if isinstance(recipe, str):
+            if any(i.isdigit() for i in recipe):
+                return False
+        
+        elif isinstance(recipe, (int, float)):
             return False
-    
-    elif isinstance(recipe, (int, float)):
-        return False
-    
-    if isinstance(ingredient, (int, float)):
-        return False
-
-    elif isinstance(ingredient, (tuple, list, set)):
-        if any(re.search(r'\d', i) for i in get_values(ingredient)):
-            return False
-    
-    elif isinstance(ingredient, str):
-        if any(re.search(r'\d', i) for i in get_first_value(ingredient)):
+        
+        if isinstance(ingredient, (int, float)):
             return False
 
-    return True
+        elif isinstance(ingredient, (tuple, list, set)):
+            if any(re.search(r'\d', i) for i in get_values(ingredient)):
+                return False
+        
+        elif isinstance(ingredient, str):
+            if any(re.search(r'\d', i) for i in get_first_value(ingredient)):
+                return False
+
+        return True
+    except IndexError:
+        pass
 
 
 def add_recipe(recipe):
@@ -55,7 +58,7 @@ def add_recipe(recipe):
     try:
         recipe = recipe.split(": ")
         name = recipe[0].title()
-        ingredients = [x.capitalize() for x in recipe[1].split(", ")] 
+        ingredients = [x.capitalize() for x in recipe[1].split(", ")]
         data = load_recipe()
         is_correct = correct_input_recipe_and_ingredient(name, ingredients)
         if is_correct:
@@ -205,13 +208,10 @@ def find_ingredient_in_recipe(recipe, ingredient):
     - Проверяет наличие ингредиентов в рецепте
     - Возвращает кортеж множеств (<Уже есть в рецепте блюда>, <Еще нет в рецепте блюда>)"""
 
+    # Так же можно проверять имееются ли недопустимые знаки #!@$%&*()^;"№+=
+
     data = load_recipe()
-    if isinstance(ingredient, str):
-        ingredients = [x.capitalize() for x in ingredient.split(", ")]
-    elif isinstance(ingredient, (tuple, list, set)):
-        ingredients = [x.capitalize() for x in ingredient]
-    else:
-        ingredients = ingredient
+    ingredients = correct_instance(ingredient)
     is_correct = correct_input_recipe_and_ingredient(recipe, ingredients)
     if is_correct:
         if recipe.title() in data.keys():
@@ -222,19 +222,28 @@ def find_ingredient_in_recipe(recipe, ingredient):
                         in_the_recipe = set()
                         if ingredient:
                             for i in ingredients:
-                                if i not in [ing for ing in find_in(i, value)]:
+                                if get_first_value(i) not in get_values(value):
                                     not_in_the_recipe.add(i)
                                 else:
                                     in_the_recipe.add(i)
                             return in_the_recipe, not_in_the_recipe
                         else:
-                            return False # если пользователь ввел пустую строку
+                            print("Похоже вы ввели пустую строку место ингредиентов!")
                     else:
-                        return f"{recipe.title()} не содержит ингредиентов"
+                        print(f"{recipe.title()} не содержит ингредиентов")
         else:
-            return f'{recipe.title()} нет в книге рецептов! Проверьте написание!'
+            print(f'{recipe.title()} нет в книге рецептов! Проверьте написание!')
     else:
-        return "Похоже вы ввели цифру в записи рецепта или ингредиента, это недопустимо!"
+        print("Похоже вы ввели цифру в записи рецепта или ингредиента, это недопустимо!")
+
+
+def correct_instance(ingredient):
+    if isinstance(ingredient, str):
+        return [x.capitalize() for x in ingredient.split(", ")]
+    elif isinstance(ingredient, (tuple, list, set)):
+        return [x.capitalize() for x in ingredient]
+    else:
+        return ingredient
 
 
 def find_recipe(recipe):
@@ -244,13 +253,14 @@ def find_recipe(recipe):
     - - 2. В случае отсутствия - возвращает информацию об этом и False в виде кортежа. """
 
     data = load_recipe()
-    if recipe.casefold() in [x.casefold() for x in data.keys()]:
-        return recipe.casefold(), True
+    if data and data.keys():
+        if recipe.lower() in [x.lower() for x in data.keys()]:
+            return recipe.casefold(), True
+        return "Такого рецепта еще не существует", False
     else:
-        return "Такого рецепта еще не существует.", False
+        print("Книга рецептов пуста!")
 
 
-# ТАК КАК ЗАМЕНЕНА ФУНКЦИЯ find_ingredient_in_recipe() ЭТА ФУНКЦИЯ НЕВАЛИДНАЯ
 def delete_ingredient(recipe, ingredient):
     """Удаление определенного ингредиента из определенного рецепта
     
@@ -261,15 +271,22 @@ def delete_ingredient(recipe, ingredient):
     - - 2. В случае отсутствия - выдает об этом информацию. """
 
     data = load_recipe()
-    availability, is_true = find_ingredient_in_recipe(recipe, ingredient)
-    if is_true:
-        data[recipe].remove(availability)
-        print(f"{ingredient} успешно удален из рецепта!")
+    ingredient = correct_instance(ingredient)
+    in_the_recipe = find_ingredient_in_recipe(recipe, ingredient)[0]
+    if data and data.keys():
+        if recipe and ingredient:
+            if in_the_recipe:
+                data[recipe.title()] = list(filter(lambda x: get_first_value(x) not in get_values(in_the_recipe), data[recipe.title()]))
+                save_recipe(data)
+                print("Ингредиент(ы) успешно удален(ы) из рецепта!")
+            else:
+                print(f"Ингредиент(ы) отсутствует(ют) в рецепте этого блюда!")
+        else:
+            print("Вы ввели пустую строку в названии рецепта или ингредиента!")
     else:
-        print(availability)
-    save_recipe(data)
+        print("Книга рецептов пуста!")
 
-# НЕ МЕНЯЛ ЕЩЕ
+
 def delete_recipe(recipe):
     """Удаление рецепта целиком
     
@@ -280,17 +297,18 @@ def delete_recipe(recipe):
 
     data = load_recipe()
     availability, is_true = find_recipe(recipe)
+    
     if is_true:
         try:
             del data[recipe.title()]
             print(f'{recipe.title()} успешно удален из книги рецептов!')
             save_recipe(data)
         except KeyError:
-            print("Некорректный ввод, проверьте регистр!")
+            print("Рецепт не найден в книге рецептов. Проверьте название рецепта.")
     else:
         print(availability)
 
-# НЕ МЕНЯЛ
+
 def add_ingredient(recipe, ingredient):
     """Добавление ингредиента в блюдо
     
@@ -301,20 +319,28 @@ def add_ingredient(recipe, ingredient):
     - - 3. В случае, если блюда не существует в книге рецептов - выйдет оповещение об этом. """
 
     data = load_recipe()
-    is_true = find_recipe(recipe)[1]
-    ingredients = [x.capitalize() for x in ingredient.split(", ")]
-    if is_true:
-        no_ingredient = find_ingredient_in_recipe(recipe, ingredients)[1]
-        if not no_ingredient:
-            data[recipe.title()].append(ingredient.title())
-            print(f"Рецепт успешно обновлен, в него добавлен {ingredient}!")
-            save_recipe(data)
+    ingredient = correct_instance(ingredient)
+    is_correct = correct_input_recipe_and_ingredient(recipe, ingredient)
+    is_find_recipe = find_recipe(recipe)[1]
+    if is_correct:
+        if is_find_recipe:
+            try:
+                not_in_the_recipe = find_ingredient_in_recipe(recipe, ingredient)[1]
+                if not_in_the_recipe:
+                    for i in not_in_the_recipe:
+                        data[recipe.title()].append(i)
+                    save_recipe(data)
+                    print("Ингредиент(ы) успешно добавлен(ы) в рецепт!")
+                else:
+                    print("В рецепте уже присутствуют все ингредиенты!")
+            except TypeError:
+                pass
         else:
-            print(f"{ingredient.title()} уже присутствует в блюде!")
+            print(f"{recipe.title()} еще нет в книге рецептов!")
     else:
-        print("Такого рецепта еще не существует! Проверьте написание!")
+        print("Проверьте корректность ввода, пустые строки или цифры недопустимы!")
 
-# НЕ МЕНЯЛ
+
 def reset_ingredients(recipe):
     """Удаление всех ингредиентов блюда
     
@@ -323,23 +349,27 @@ def reset_ingredients(recipe):
     - Удаляет все ингредиенты не удаляя само название блюда """
 
     data = load_recipe()
-    is_true = find_recipe(recipe)[1]
-    if is_true:
-        data[recipe.title()].clear()
-        save_recipe(data)
+    if data:
+        is_true = find_recipe(recipe)[1]
+        if is_true:
+            data[recipe.title()].clear()
+            save_recipe(data)
+            print("Все ингредиенты блюда успешно удалены!")
+        else:
+            print("Такого рецепта еще не существует! Проверьте написание!")
     else:
-        print("Такого рецепта еще не существует! Проверьте написание!")
+        print("Книга рецептов пуста!")
 
 
 #add_recipe(input())
 #print_all_recipes()
 #print_recipe("Борщ Классический")
 #find_ingredient_in_all_recipes("вода")
-#print(find_ingredient_in_recipe("Чай", "Что"))
-#delete_ingredient("Мохито", "вода")
-#delete_recipe("кофе")
-#print(find_recipe("кофе"))
-#add_ingredient("МоХитf", "сахАрок")
-#reset_ingredients("чай")
-#add_ingredient("чай", "сахар, ")
+#print(find_ingredient_in_recipe("моХИто", "водка - 100мл, ром - 300гр, мята - 80гр, сахар - 20г, вода 500мл"))
+#delete_ingredient("Мохито", "водка - 100мл, ром - 300гр, мята - 80гр, сахар - 20г, вода 500мл")
+#delete_recipe("чай")
+#print(find_recipe("таНЯ"))
+#add_ingredient("Чай", "Лепесток")
+#reset_ingredients("мохито")
+#add_ingredient("мохито", "сахар")
 
